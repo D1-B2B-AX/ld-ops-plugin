@@ -29,6 +29,7 @@ stale 필터:
 
 v1.0 (2026-04-24)
 v1.1 (2026-04-27): 4구역 레이아웃 + 옵션 A 그룹화 진행 현황 + 알림 위계 동적 결정.
+v1.7 (2026-04-28): llm_reason 활용 — 알림 부연·진행 현황 우선 표시. (다차수 맥락 손실 차단)
 """
 
 import argparse
@@ -122,6 +123,27 @@ def shorten_text(text, max_len=BRIEF_MAX_LEN):
     if len(s) <= max_len:
         return s
     return s[:max_len].rstrip() + "…"
+
+
+def extract_short_reason(llm_reason, max_len=45):
+    """llm_reason에서 알림 부연용 짧은 핵심구를 추출 (v1.7).
+
+    형식 가정: "<context> — <reason>" or "<reason>"
+    em-dash 뒤를 우선 채택, 첫 문장(. 분리)만 사용, 길면 잘라냄.
+    """
+    if not llm_reason:
+        return ""
+    s = " ".join(str(llm_reason).split())
+    parts = s.split("—", 1)
+    text = parts[1].strip() if len(parts) == 2 else s
+    for sep in [". ", "."]:
+        if sep in text:
+            text = text.split(sep, 1)[0]
+            break
+    text = text.strip()
+    if len(text) > max_len:
+        text = text[:max_len].rstrip() + "…"
+    return text
 
 
 def short_email_from(from_field):
@@ -310,6 +332,7 @@ def group_alert_cells(alert_cells):
                 "urgent_offset": urgent_offset,
                 "urgent_d_day": urgent_d_day,
                 "count": len(items),
+                "llm_reasons": [i.get("llm_reason") for i in items if i.get("llm_reason")],
             }
         )
     return out
@@ -405,6 +428,7 @@ def render_alert_section(
             "urgent_d_day": "",
             "urgent_offset": 0,
             "checkpoint_labels": [],
+            "llm_reasons": [],
         }
     )
     for g in cp_groups:
@@ -417,6 +441,7 @@ def render_alert_section(
         m["urgent_d_day"] = key_dday
         m["urgent_offset"] = g["urgent_offset"]
         m["checkpoint_labels"].append(g["checkpoint_label"])
+        m["llm_reasons"].extend(g.get("llm_reasons", []))
 
     groups = list(merged.values())
     groups.sort(key=lambda g: -g["urgent_offset"])
@@ -456,6 +481,16 @@ def render_alert_section(
                     f"**{customer}** {sess} 교육 **당일** — "
                     f"{cps_text} 즉시 확인"
                 )
+
+        # v1.7: llm_reason 부연 (다차수 맥락 보강)
+        short_reason = ""
+        for r in g.get("llm_reasons", []):
+            ext = extract_short_reason(r)
+            if ext:
+                short_reason = ext
+                break
+        if short_reason:
+            sentence = f"{sentence} ({short_reason})"
         lines.append(f"- {sentence}")
     return "\n".join(lines)
 
@@ -695,6 +730,7 @@ def render_progress_section(
         cp_to_phase_order = {}
         by_label_cp_polished = defaultdict(dict)
         by_label_cp_id = defaultdict(dict)  # v1.5: cp_label → cp_id (manual_only 처리용)
+        by_label_cp_llm_reason = defaultdict(dict)  # v1.7: LLM이 부여한 사유 — polished 자리로 우선 사용
         # 헤더는 단일 라벨 압축 여부에 따라 다르게 출력하므로 일단 출력 보류
 
         for c in items_for_render:
@@ -711,6 +747,7 @@ def render_progress_section(
             evidence = evidence_index.get(key, {})
             brief = format_evidence_brief(evidence, label)
             polished = c.get("polished_brief")  # v1.2.2: LLM polish 결과
+            llm_reason_val = c.get("llm_reason")  # v1.7: LLM 분류 단계 사유
             auto_reason = c.get("auto_reason")
             cp_id = cell.get("checkpoint_id", "")
 
@@ -732,6 +769,9 @@ def render_progress_section(
             # polished brief는 가장 먼저 들어온 것 유지 (LLM 응답이라 신뢰도 동일)
             elif polished and cp_label not in by_label_cp_polished[label]:
                 by_label_cp_polished[label][cp_label] = polished
+            # v1.7: llm_reason 별도 누적 — polished 우선, 없으면 fallback으로 사용
+            if llm_reason_val and cp_label not in by_label_cp_llm_reason[label]:
+                by_label_cp_llm_reason[label][cp_label] = llm_reason_val
 
         # v1.4 (260427): 단일 라벨 블록 압축 — 📅(시점 미도래)에만 적용.
         #   다른 라벨(🟡·✅·🔴·⚪)은 brief 데이터가 있어야 하므로 일반 출력으로 fallback.
@@ -770,11 +810,18 @@ def render_progress_section(
                 brief = cp_dict[cp_label]
                 reason = by_label_cp_reason[label].get(cp_label)
                 cp_id = by_label_cp_id[label].get(cp_label)
+                llm_reason = by_label_cp_llm_reason[label].get(cp_label)
                 # v1.5: tax_invoice 🔴은 polished/brief 무시하고 manual 안내 강제
                 if cp_id == "tax_invoice" and label == "🔴":
                     meta = render_cell_meta(label, brief, reason, cp_id)
                 else:
-                    meta = polished if polished else render_cell_meta(label, brief, reason, cp_id)
+                    # v1.7: 우선순위 — polished > llm_reason > evidence brief
+                    if polished:
+                        meta = polished
+                    elif llm_reason:
+                        meta = shorten_text(llm_reason, 120)
+                    else:
+                        meta = render_cell_meta(label, brief, reason, cp_id)
                 # v1.2.3: 자동 ✅(local+successor) 신뢰도 꼬리표
                 if reason == "local_and_successor_evidence" and meta:
                     meta = f"{meta} _(후속 단계 추정)_"
@@ -825,7 +872,7 @@ def render_no_schedule_section(deals_no_schedule):
 
 def render_footer():
     now = datetime.now().strftime("%H:%M")
-    return f'_자연어로 수정 가능 (예: "Customer D 거래명세서 완료됐어") · 생성 {now} · v1.6_'
+    return f'_자연어로 수정 가능 (예: "Customer D 거래명세서 완료됐어") · 생성 {now} · v1.7_'
 
 
 def build_unresolved_deal_ids(sessions_data):
