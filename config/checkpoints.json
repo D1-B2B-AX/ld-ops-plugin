@@ -1,0 +1,190 @@
+{
+  "version": "v0.3",
+  "last_updated": "2026-04-27",
+  "source_note": "WBS 운영 템플릿 모음 ver.25에서 LD 관점 필터링 후 Owner 답변(260424) 반영. 필수 7 + 조건부 2 = 9개. v0.2(260427): 시간 순서 phase 5단계 정의. v0.3(260427): granularity 필드 추가 - deal 단위(딜 1회만 노티)와 session 단위(회차마다 노티) 구분. 사용자 결정: 기업계약·강사계약·싱크업·고객사 환경·강사 환경·세금계산서 = deal 단위 / 교안 컨펌·안내·만족도 = session 단위.",
+  "phases": [
+    {"order": 1, "id": "sync",         "label": "싱크업",       "desc": "LD→OM 인계·다차수 사전 미팅 단계"},
+    {"order": 2, "id": "contract_env", "label": "계약·환경",    "desc": "기업·강사 계약 + 교육 환경 점검 단계"},
+    {"order": 3, "id": "curriculum",   "label": "교안",         "desc": "강사 교안 컨펌 + 고객사 전달 단계"},
+    {"order": 4, "id": "education",    "label": "교육 직전·진행", "desc": "교육생 안내·교육 실시 단계"},
+    {"order": 5, "id": "post",         "label": "사후",         "desc": "세금계산서·만족도 등 교육 종료 후 정산 단계"}
+  ],
+  "_comment_phases": "체크포인트의 시간 순서. 1→2→3→4→5 흐름이며, 같은 (deal, session)의 후속 phase에 진행 증거 있으면 앞 phase는 ✅ 완료 추정 가능 (classify_evidence.py 5분류 로직). 미래 phase 셀(window 미도래)은 📅 예정 자동 부여.",
+  "_comment_granularity": "deal=딜 1회만 노티(다차수라도 1셀), session=회차마다 별도 노티. build_matrix.py가 이 필드 보고 셀 생성 단위 결정.",
+  "checkpoints": [
+    {
+      "id": "contract_customer",
+      "label": "기업계약 체결",
+      "phase": "contract_env",
+      "category": "필수",
+      "severity": "확인필요",
+      "anchor": "edu_start",
+      "window": {"from": -60, "to": -7},
+      "timing_desc": "교육 확정 즉시 ~ D-7",
+      "evidence_keywords": {
+        "slack": ["계약", "체결", "서명"],
+        "gmail": ["계약", "체결"],
+        "drive": ["계약서"]
+      },
+      "completion_hint": "고객사 기업계약 서명 완료 증거 (계약서 파일 or 서명 완료 메시지·메일)",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "contract_instructor",
+      "label": "강사계약 체결",
+      "phase": "contract_env",
+      "category": "필수",
+      "severity": "즉각해결",
+      "anchor": "edu_start",
+      "window": {"from": -14, "to": -7},
+      "timing_desc": "D-7 쯤 (기업 계약 체결 후 진행)",
+      "evidence_keywords": {
+        "slack": ["강사", "계약", "서명", "확정"],
+        "gmail": ["강사 계약", "계약서"],
+        "drive": ["강사 계약서", "강사계약"]
+      },
+      "completion_hint": "강사 계약 서명 완료 증거. 섭외는 제안 단계에서 이미 완료된다는 전제이므로 확인 대상 아님",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "sync_meeting",
+      "label": "싱크업 미팅 (LD→OM 인계·다차수)",
+      "phase": "sync",
+      "category": "필수",
+      "severity": "확인필요",
+      "anchor": "edu_start",
+      "window": {"from": -90, "to": -30},
+      "timing_desc": "LD→OM 인계 즉시 (D-30 이전). Won 전 단계부터 논의 시작 가능. 다차수는 정기 추가",
+      "evidence_keywords": {
+        "slack": ["싱크업", "씽크업", "미팅", "논의"],
+        "gmail": ["싱크업", "미팅"],
+        "drive": ["싱크업"]
+      },
+      "completion_hint": "LD와 OM 간 싱크업 미팅 진행 증거 (싱크업 문서 미팅로그 탭 기재 or 슬랙 싱크업 논의 스레드). 다차수 교육은 회차별 정기 추가",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "customer_env_check",
+      "label": "고객사 교육 환경 확인 (강의장·장비·보안)",
+      "phase": "contract_env",
+      "category": "필수",
+      "severity": "즉각해결",
+      "anchor": "edu_start",
+      "window": {"from": -21, "to": -10},
+      "timing_desc": "D-21 ~ D-14 (최소 D-10)",
+      "evidence_keywords": {
+        "slack": ["강의장", "장비", "보안", "사전 확인", "제반사항"],
+        "gmail": ["사전 강의 제반", "강의장", "보안"],
+        "drive": ["사전 확인서", "기업용"]
+      },
+      "completion_hint": "고객사 강의장·장비·보안 사전 확인 회신 증거 (기업용 사전 확인 요청서 회신 or 고객사 확인 메일)",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "instructor_env_request",
+      "label": "강사 교안·교육 환경 요청/검수",
+      "phase": "contract_env",
+      "category": "필수",
+      "severity": "확인필요",
+      "anchor": "edu_start",
+      "window": {"from": -28, "to": -14},
+      "timing_desc": "D-21 쯤",
+      "evidence_keywords": {
+        "slack": ["강사", "교안 요청", "검수", "환경", "설치"],
+        "gmail": ["강사 사전 확인", "교안 요청", "설치"],
+        "drive": ["강사 사전 확인서"]
+      },
+      "completion_hint": "강사에게 교안·교육 환경(설치 프로그램·보안 접속 등) 요청 및 회신 받은 증거 (강사 사전 확인 요청서 회신)",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "curriculum_confirm",
+      "label": "교안 컨펌 + 고객사 전달",
+      "phase": "curriculum",
+      "category": "필수",
+      "severity": "즉각해결",
+      "anchor": "edu_start",
+      "window": {"from": -14, "to": -7},
+      "timing_desc": "D-10 ~ D-7",
+      "evidence_keywords": {
+        "slack": ["교안", "컨펌", "검토", "최종본", "전달", "접속", "설치"],
+        "gmail": ["교안", "컨펌", "전달"],
+        "drive": ["교안"]
+      },
+      "completion_hint": "강사 교안 컨펌 완료 + 고객사에 교안·접속 사이트·설치 프로그램 전달 증거. LD는 커리큘럼과 교안 워딩 불일치 여부도 같이 확인 (예: 커리큘럼 'API 연동' vs 교안 '정보 불러오기')",
+      "flag_id": null,
+      "granularity": "session"
+    },
+    {
+      "id": "tax_invoice",
+      "label": "거래명세서·세금계산서 발행",
+      "phase": "post",
+      "category": "필수",
+      "severity": "관찰",
+      "anchor": "edu_end",
+      "window": {"from": 3, "to": 14},
+      "timing_desc": "D+3 ~ D+7 (거래명세서 선행, 세금계산서 후속)",
+      "evidence_keywords": {
+        "slack": ["세금계산서", "계산서", "발행", "거래명세서", "명세서"],
+        "gmail": ["세금계산서", "계산서", "거래명세서", "명세서"],
+        "drive": ["계산서", "세금계산서", "거래명세서"]
+      },
+      "completion_hint": "거래명세서 또는 세금계산서 발행 증거 (계산서 발급 신청·발행 완료 메시지·거래명세서 송부 등). 다차수라도 딜 1회만 발행 (사용자 결정 260427). 거래명세서·세금계산서 어느 한쪽이라도 처리되면 진행 단서로 인정.",
+      "flag_id": null,
+      "granularity": "deal"
+    },
+    {
+      "id": "announcement",
+      "label": "교육생 입과·강의 안내 메일",
+      "phase": "education",
+      "category": "조건부",
+      "severity": "확인필요",
+      "anchor": "edu_start",
+      "window": {"from": -14, "to": -7},
+      "timing_desc": "D-7 (우리가 담당하는 경우만)",
+      "evidence_keywords": {
+        "slack": ["입과 안내", "수강 안내", "강의 안내", "학습자"],
+        "gmail": ["입과 안내", "수강 안내", "교육 안내"],
+        "drive": ["안내 메일", "입과 안내"]
+      },
+      "completion_hint": "학습자에게 교육 입과/강의 안내 메일 발송 증거. 단 기본은 고객사 담당. deal_flags.has_customer_announcement=true 인 경우만 평가",
+      "flag_id": "has_customer_announcement",
+      "granularity": "session"
+    },
+    {
+      "id": "satisfaction",
+      "label": "만족도 리포팅 (기업·강사)",
+      "phase": "post",
+      "category": "조건부",
+      "severity": "확인필요",
+      "anchor": "edu_end",
+      "window": {"from": 3, "to": 14},
+      "timing_desc": "D+3 ~ D+7 (늦어도 D+14)",
+      "evidence_keywords": {
+        "slack": ["만족도", "리포팅", "결과 리포트"],
+        "gmail": ["만족도", "리포팅", "결과"],
+        "drive": ["만족도", "리포트"]
+      },
+      "completion_hint": "만족도 설문 결과를 기업·강사에게 리포팅한 증거 (리포팅 메일 발송 or 결과 파일 공유)",
+      "flag_id": "has_satisfaction_report",
+      "granularity": "session"
+    }
+  ],
+  "deal_flags": {
+    "has_customer_announcement": {
+      "default": false,
+      "description": "교육생 안내 메일을 우리가 담당하는가. 기본 false (Owner 답변: 대부분 고객사 담당)",
+      "controls_checkpoint": "announcement"
+    },
+    "has_satisfaction_report": {
+      "default": true,
+      "description": "만족도 리포팅을 진행하는가. 교육별 요구사항에 따라 조정",
+      "controls_checkpoint": "satisfaction"
+    }
+  }
+}

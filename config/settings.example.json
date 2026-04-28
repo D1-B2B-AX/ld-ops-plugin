@@ -1,0 +1,104 @@
+{
+  "_comment_owner": "LD 본인 정보 — 설치 후 반드시 수정. calendars는 이중 계정 구조 (personal + team_education_schedule).",
+  "owner": {
+    "name": "Owner Name",
+    "email": "your-email@example.com",
+    "team": "교육 2팀",
+    "_comment_team_options": "교육 1팀 | 교육 2팀 | 교육 1팀 운영 파트 | 교육 2팀 운영 파트",
+    "slack_user_id": null,
+    "_comment_slack_user_id": "Slack user_id (예: U01234ABCDE). 미확보 시 null — 스킬 3이 @owner.name 멘션 쿼리로 폴백.",
+    "notion_name_aliases": ["Owner Name"],
+    "_comment_notion_name_aliases": "노션 DB '기획' 컬럼에서 LD 매칭할 이름 표기 alias. 노션 표기 편차(역순 등) 흡수용.",
+    "calendars": [
+      {
+        "id": "your-email@example.com",
+        "role": "personal",
+        "purpose": "개인 일정 (미팅·체크인·업무 일반)"
+      },
+      {
+        "id": "team-shared-calendar@example.com",
+        "role": "team_education_schedule",
+        "purpose": "다차수 교육 세부 일정 (공용 캘린더)"
+      }
+    ]
+  },
+
+  "_comment_data_sources": "데이터 원천 경로·URL·라벨·채널",
+  "data_sources": {
+    "salesmap_db_path": "~/salesmap/salesmap_latest.db",
+    "salesmap_download_url": "https://github.com/sabinanfranz/data_analysis_ai/releases/download/salesmap-db-latest/salesmap_latest.db",
+
+    "_comment_gmail_mode": "'test' — 공용 라벨 경유(2팀 공용계정 기반) / 'deploy' — 개인 메일함 기반(본인 계정)",
+    "gmail_mode": "deploy",
+    "gmail_label": "B2b_2팀메일",
+
+    "_comment_api_caller": "테스트 모드 전용 — Google API 호출에 쓸 인증 계정. 배포 시 owner.email로 자동 대체됨",
+    "api_caller_email": "your-email@example.com",
+
+    "_comment_slack_ops": "운영 플러그인용 슬랙 채널 — P1(직접 운영) > P2(강사·매칭) > P3(보충) 우선순위 구조. team 값에 따라 공통 + 해당 팀 자동 매핑.",
+    "_comment_slack_ops_priority": "P1=체크포인트 증거 1차 소스. P2=강사·매칭. P3=보충 정보. 검색은 모든 P 채널 동일 쿼리, collect_evidence.py에서 결과 후처리 시 가중치 적용.",
+    "slack_ops_common_channels": {
+      "P1": ["b2b_운영요청_alert"],
+      "P2": ["b2b_skillmatch"],
+      "P3": []
+    },
+    "slack_ops_team_channels": {
+      "교육 1팀": {
+        "P1": ["b2b_1팀_운영논의", "b2b_1팀_운영파트"],
+        "P2": [],
+        "P3": ["b2b_1팀_all"]
+      },
+      "교육 2팀": {
+        "P1": ["b2b_2팀_운영요청", "b2b_2팀_운영논의"],
+        "P2": ["b2b_2팀_skillmatch"],
+        "P3": ["b2b_2팀_all"]
+      },
+      "교육 1팀 운영 파트": {
+        "P1": ["b2b_1팀_운영논의", "b2b_1팀_운영파트"],
+        "P2": [],
+        "P3": ["b2b_1팀_all"]
+      },
+      "교육 2팀 운영 파트": {
+        "P1": ["b2b_2팀_운영요청", "b2b_2팀_운영논의"],
+        "P2": ["b2b_2팀_skillmatch"],
+        "P3": ["b2b_2팀_all"]
+      }
+    },
+
+    "_comment_drive": "구글 드라이브 파일 검색 키워드 — 파일명에 포함되고 과정명/고객사명이 함께 있으면 대상",
+    "drive_file_keywords": ["기획", "싱크업", "씽크업"],
+
+    "_comment_ops_course_formats": "운영 체크포인트 9개가 적용되는 교육 형태만 포함. 온라인 콘텐츠·구독·컨설팅·콘텐츠 제작 등은 9개 체크포인트 매칭 어려움 → 제외.",
+    "ops_included_course_formats": ["출강", "복합(출강+온라인)"],
+
+    "_comment_notion": "2팀 전용. v1.0 MVP에서 노션 검색 비활성. 활성화하려면 path 복구 + runtime/notion_calendar.csv 배치.",
+    "notion_schedule_csv_path_by_team": {
+      "교육 1팀": null,
+      "교육 2팀": null,
+      "교육 1팀 운영 파트": null,
+      "교육 2팀 운영 파트": null
+    },
+    "notion_csv_columns": {
+      "name": "Name",
+      "date": "강의관리 일정",
+      "customer": "기업명",
+      "planner": "기획",
+      "operator": "운영",
+      "instructor_managers": "강의 관리 참석자",
+      "venue": "장소"
+    }
+  },
+
+  "_comment_ops": "운영 플러그인 전용 섹션",
+  "ops": {
+    "_comment_state": "자연어 피드백 루프 상태 저장 (cell_overrides·schedule_overrides 등)",
+    "state_file_path": "state/ops_state.json"
+  },
+
+  "_comment_report": "리포트 출력 설정",
+  "report": {
+    "output_dir": "outputs",
+    "archive_dir": "archive",
+    "retention_days": 14
+  }
+}

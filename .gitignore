@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OMC 작업 디렉토리
+.omc/
+
+# 실제 사용자 설정 (개인정보 차단 — settings.example.json만 push)
+config/settings.json
+
+# 런타임·결과·상태 (실제 LD 데이터 차단 — 슬랙·메일·고객사 본문 포함)
+runtime/*
+outputs/*
+state/*
+archive/*
+test/sample_outputs/
+
+# .gitkeep만 push되도록 예외
+!runtime/.gitkeep
+!outputs/.gitkeep
+!state/.gitkeep
+!archive/.gitkeep
+
+# 백업·임시 파일
+*_BACKUP.md
+runtime_backup_*/
+*.bak
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
