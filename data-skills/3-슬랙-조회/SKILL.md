@@ -213,12 +213,22 @@ in:<P1채널1> in:<P1채널2> {customer_token} {course_token} after:<30일전 YY
 - `customer_token`: 딜의 `organization_name` (예: `Customer F`)
 - `course_token`: 딜명에서 핵심 명사 1~2개 (스킬 3 STEP 2 §"다중 딜 구분" 참조)
 - **STEP 1~6과 다른 점:** owner 멘션·`from:` 필터 **포함하지 않음** (운영 요청 채널은 OM·다른 팀원 답글이 핵심 정보원)
-- **회차 키워드 보강:** 쿼리에 `(N차 OR 회차 OR 차수 OR 일정)` OR 절 추가하면 정확도 ↑ (선택)
+- **`response_format="detailed"` 필수** (260428 검증) — concise 모드는 ts·thread_ts·channel_id 추출 어려움 → detailed로 호출
 
 **부모 메시지 추출:**
 - 검색 결과 각 메시지에서 `thread_ts` 또는 `ts` 확인
 - `thread_ts == ts`인 메시지만 부모 (답글 제외)
 - 같은 thread는 중복 제거 (parent_ts 기준 unique)
+
+### 7-2.1. LLM 본문 검증 (false positive 차단, 260428 보강)
+
+Slack 검색은 단일 토큰 매칭도 결과에 포함하므로, **검색 결과 raw 본문을 LLM이 한 번 더 검증**:
+
+1. 각 후보 thread의 부모 본문에 **고객사명 + 과정명 토큰 둘 다 직접 등장**하는가 확인
+2. **둘 다 등장**: thread parent 후보로 채택
+3. **하나만 등장 또는 둘 다 없음**: false positive로 제외
+
+**예시 (260428 E2E):** "Customer F 시너지" 검색 시 결과에 "다른고객사 26년 AI 부스트업 캠프" 메시지가 단일 토큰("시너지" 또는 OR 매칭)으로 섞여 들어옴 → 본문 검증으로 제외해야 정확.
 
 ### 7-3. Thread 답글 자동 수집 (병렬)
 
@@ -258,16 +268,20 @@ slack_read_thread(channel_id=<채널 ID>, oldest=<thread_ts>, ...)
 }
 ```
 
-### 7-5. False positive 방지 (정확도 룰)
+### 7-5. False positive 방지 (정확도 룰, 260428 보강)
 
-- **고객사명 + 과정명 토큰 둘 다 본문 매칭** 필터 (단일 토큰만 매칭은 false positive 90% — 스킬 3 §"E2E 핵심 발견" 참조)
+- **STEP 7-2.1 LLM 본문 검증 강제** — Slack 검색 자체가 OR 처리 가능하므로 결과 본문 재확인 필수
 - **30일 이내** thread만 (오래된 차수 정보는 변경 가능성 ↑ 노이즈)
 - 매칭 0건 시 → 해당 deal에 빈 `threads: []`로 저장 (compose_schedule이 폴백 처리)
 
 ### 7-6. LD 안내 (자동 수집 결과 부족 시)
 
-`thread_count == 0` 또는 모든 `threads: []`인 경우 사용자에 한 줄 안내:
+**케이스 A — `thread_count == 0`:**
 > *"운영 요청 채널에서 회차 정보 자동 수집 0건. 슬랙에 직접 thread 있으면 키워드(고객사명+과정명) 정확도 확인 필요."*
+
+**케이스 B — 자유 형식 thread (정형 패턴 매칭 어려움):**
+260428 E2E 발견 — 일부 딜은 thread는 있으나 본문이 자유 서술형(예: *"3월 9일부터 매주 월요일..."*)이라 `compose_schedule.py`의 정형 정규식(`N차 M/D~M/D` / `M월 D, D`)에 매칭 안 됨. 이 경우 thread 수집은 성공하나 차수 분해 결과 0.
+- LD 안내: *"{deal_name}: 운영 채널 thread 자유 형식 — 자동 차수 분해 어려움. 드라이브 session_schedule 또는 자연어 피드백으로 보완 권장."*
 
 LD가 자연어 피드백으로 보완 가능. (시스템 본질 — 100% 자동 ≠ 목표)
 
