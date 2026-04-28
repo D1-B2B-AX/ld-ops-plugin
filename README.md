@@ -127,7 +127,7 @@ ld-ops-plugin/
 │   ├── generate_ops_md.py       # Step 4: 리포트 생성
 │   ├── verify_output_format.py  # Step 4.6: 검증
 │   ├── md_to_slack.py           # 슬랙 호환 변환
-│   └── parse_notion_csv.py      # 노션 CSV (2팀, v1.0 비활성)
+│   └── parse_notion_csv.py      # 노션 CSV (비활성)
 ├── outputs/                 # 일자별 리포트 (.gitignore — 실제 데이터 차단)
 ├── runtime/                 # 중간 산출물 (매 실행 재생성, .gitignore)
 ├── state/                   # 자연어 피드백 누적 상태 (.gitignore)
