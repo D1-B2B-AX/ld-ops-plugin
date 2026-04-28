@@ -205,13 +205,13 @@ STEP 6: 대화 부재 판별
 
 각 Won 딜에 대해 `mcp__claude_ai_Slack__slack_search_public_and_private` 호출:
 
-**쿼리 포맷:**
+**쿼리 포맷 (v1.1.1, 260428 보강):**
 ```
-in:<P1채널1> in:<P1채널2> {customer_token} {course_token} after:<30일전 YYYY-MM-DD>
+in:<P1채널1> in:<P1채널2> {customer_token} after:<edu_start - 60일 YYYY-MM-DD>
 ```
 
-- `customer_token`: 딜의 `organization_name` (예: `Customer F`)
-- `course_token`: 딜명에서 핵심 명사 1~2개 (스킬 3 STEP 2 §"다중 딜 구분" 참조)
+- `customer_token`: 딜의 `organization_name`만 사용 (예: `Customer F`). **과정명 토큰은 1차 검색에서 제외** — 세일즈맵 deal_name과 운영 채널 코스명이 다를 수 있음 (260428 발견: deal `호텔롯데-AI 시너지` vs ops thread `롯데호텔앤리조트_바이브코딩 과정`)
+- **검색 윈도우**: `after: edu_start - 60일` (딜마다 동적). 운영 요청 thread는 보통 운영 시작 1~2개월 전 작성. 30일 윈도우는 회차 정보 thread 놓침 (260428 실측)
 - **STEP 1~6과 다른 점:** owner 멘션·`from:` 필터 **포함하지 않음** (운영 요청 채널은 OM·다른 팀원 답글이 핵심 정보원)
 - **`response_format="detailed"` 필수** (260428 검증) — concise 모드는 ts·thread_ts·channel_id 추출 어려움 → detailed로 호출
 
@@ -220,26 +220,39 @@ in:<P1채널1> in:<P1채널2> {customer_token} {course_token} after:<30일전 YY
 - `thread_ts == ts`인 메시지만 부모 (답글 제외)
 - 같은 thread는 중복 제거 (parent_ts 기준 unique)
 
-### 7-2.1. LLM 본문 검증 (false positive 차단, 260428 보강)
+### 7-2.1. LLM 본문 검증 (false positive 차단 + 정형 thread 우선순위, 260428 보강)
 
 Slack 검색은 단일 토큰 매칭도 결과에 포함하므로, **검색 결과 raw 본문을 LLM이 한 번 더 검증**:
 
-1. 각 후보 thread의 부모 본문에 **고객사명 + 과정명 토큰 둘 다 직접 등장**하는가 확인
-2. **둘 다 등장**: thread parent 후보로 채택
-3. **하나만 등장 또는 둘 다 없음**: false positive로 제외
+1. **고객사명 직접 등장 확인** (필수)
+   - 부모 본문에 `customer_token` 단어가 명확히 등장하는가? (다른 고객사 메시지 OR 매칭 제거)
+   - 등장 안 하면 → false positive로 제외
 
-**예시 (260428 E2E):** "Customer F 시너지" 검색 시 결과에 "다른고객사 26년 AI 부스트업 캠프" 메시지가 단일 토큰("시너지" 또는 OR 매칭)으로 섞여 들어옴 → 본문 검증으로 제외해야 정확.
+2. **정형 thread 우선순위 가산점** (운영 요청 채널의 정형 양식 본문)
+   - 부모 본문에 다음 패턴 있으면 우선 채택:
+     - `코스명:` 또는 `과정명:`
+     - `강의 일정:` 또는 `차수:`
+     - `1차 M/D` / `M월 D일` 같은 회차 정형 표기
+   - 운영 시작 전 OM이 만든 운영 요청 thread는 보통 이 정형 양식을 따름 → 회차 분해 정보의 핵심 소스
+
+3. **자유 형식 thread (회차 정보 약함)**
+   - 정형 패턴 없는 thread는 답글에서 회차 분해 가능성 검토 (예: HL만도 부모는 시트 링크만, 답글에 `4월 6, 8 / 5월 11, 12` 형식)
+   - 답글까지 봐야 차수 분해 가능 → STEP 7-3에서 read_thread 후 combined_text 활용
 
 ### 7-3. Thread 답글 자동 수집 (병렬)
 
 각 부모 thread마다 `mcp__claude_ai_Slack__slack_read_thread`:
 
 ```
-slack_read_thread(channel_id=<채널 ID>, oldest=<thread_ts>, ...)
+slack_read_thread(channel_id=<채널 ID>, message_ts=<thread_ts>, limit=100)
 ```
 
 - 부모 + 모든 답글 가져오기
 - `combined_text` 조립: 부모 본문 + `\n\n--- 답글 ---\n` + 답글 본문 N개 시간순 join
+
+**답글이 차수 정보 핵심인 경우 (260428 발견):**
+- 부모 본문이 `<시트 링크>`나 단순 알림(`@강연정 HL만도_2026 AX 교육`)만 있어도 답글에 차수 분해 정형 데이터(`기초: 4월 6, 8 / 5월 11, 12`) 들어있는 경우 多
+- 모든 답글을 빠짐없이 합쳐 `combined_text`에 포함 (compose_schedule의 정규식이 답글 텍스트도 매칭)
 
 ### 7-4. 출력 형식 (compose_schedule.py 입력 호환 — 변경 없음)
 
