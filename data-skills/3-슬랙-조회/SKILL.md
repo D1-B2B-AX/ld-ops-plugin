@@ -188,6 +188,91 @@ STEP 6: 대화 부재 판별
 | 슬랙 없음 + 메모 2주 이내 | 정상 | 없음 |
 | 슬랙 없음 + 메모 2주 초과 | **대화 부재** | `"⚠️ 대화 부재 — 마지막 메모 N일 전..."` |
 
+## STEP 7: 운영 요청 채널 thread 자동 수집 (v1.1, 운영 플러그인 전용)
+
+> `channel_set == "ops"`일 때만 실행. 딜 플러그인은 STEP 7 건너뛰기.
+>
+> **목적:** 다차수 교육의 회차 정보(`N차 M/D~M/D`, `M월 D, D` 등)는 LD 멘션 없는 OM 답글에 들어있는 경우 많음. 이를 자동 수집해 `compose_schedule.py`의 정형 차수 분해 입력으로 제공.
+>
+> **배경:** v1.0에서는 `runtime/s3_slack_ops_requests.json`을 LD가 수동 큐레이션해야 했음 → 안 하면 "세부 회차 미확정" lump 발생 (260428 E2E 실측). v1.1에서 자동화.
+
+### 7-1. 검색 채널
+
+`settings.slack_ops_team_channels[owner.team].P1` 값 그대로 사용.
+- 예: 교육 2팀 → `["b2b_2팀_운영요청", "b2b_2팀_운영논의"]`
+
+### 7-2. 딜별 thread parent 검색 (병렬, 한 번의 function_calls 블록)
+
+각 Won 딜에 대해 `mcp__claude_ai_Slack__slack_search_public_and_private` 호출:
+
+**쿼리 포맷:**
+```
+in:<P1채널1> in:<P1채널2> {customer_token} {course_token} after:<30일전 YYYY-MM-DD>
+```
+
+- `customer_token`: 딜의 `organization_name` (예: `Customer F`)
+- `course_token`: 딜명에서 핵심 명사 1~2개 (스킬 3 STEP 2 §"다중 딜 구분" 참조)
+- **STEP 1~6과 다른 점:** owner 멘션·`from:` 필터 **포함하지 않음** (운영 요청 채널은 OM·다른 팀원 답글이 핵심 정보원)
+- **회차 키워드 보강:** 쿼리에 `(N차 OR 회차 OR 차수 OR 일정)` OR 절 추가하면 정확도 ↑ (선택)
+
+**부모 메시지 추출:**
+- 검색 결과 각 메시지에서 `thread_ts` 또는 `ts` 확인
+- `thread_ts == ts`인 메시지만 부모 (답글 제외)
+- 같은 thread는 중복 제거 (parent_ts 기준 unique)
+
+### 7-3. Thread 답글 자동 수집 (병렬)
+
+각 부모 thread마다 `mcp__claude_ai_Slack__slack_read_thread`:
+
+```
+slack_read_thread(channel_id=<채널 ID>, oldest=<thread_ts>, ...)
+```
+
+- 부모 + 모든 답글 가져오기
+- `combined_text` 조립: 부모 본문 + `\n\n--- 답글 ---\n` + 답글 본문 N개 시간순 join
+
+### 7-4. 출력 형식 (compose_schedule.py 입력 호환 — 변경 없음)
+
+`runtime/s3_slack_ops_requests.json`:
+
+```json
+{
+  "_comment": "v1.1 자동 수집 (스킬 3 STEP 7) — 수동 큐레이션 불필요",
+  "_meta": {
+    "generated_at": "2026-04-28T10:43:00",
+    "channels_searched": ["b2b_2팀_운영요청", "b2b_2팀_운영논의"],
+    "deal_count": 3,
+    "thread_count": 7
+  },
+  "<deal_id_1>": {
+    "deal_name": "...",
+    "threads": [
+      {
+        "channel": "b2b_2팀_운영요청",
+        "thread_ts": "1745678900.123456",
+        "permalink": "https://...",
+        "combined_text": "부모 메시지 본문\n\n--- 답글 ---\n답글1\n답글2..."
+      }
+    ]
+  }
+}
+```
+
+### 7-5. False positive 방지 (정확도 룰)
+
+- **고객사명 + 과정명 토큰 둘 다 본문 매칭** 필터 (단일 토큰만 매칭은 false positive 90% — 스킬 3 §"E2E 핵심 발견" 참조)
+- **30일 이내** thread만 (오래된 차수 정보는 변경 가능성 ↑ 노이즈)
+- 매칭 0건 시 → 해당 deal에 빈 `threads: []`로 저장 (compose_schedule이 폴백 처리)
+
+### 7-6. LD 안내 (자동 수집 결과 부족 시)
+
+`thread_count == 0` 또는 모든 `threads: []`인 경우 사용자에 한 줄 안내:
+> *"운영 요청 채널에서 회차 정보 자동 수집 0건. 슬랙에 직접 thread 있으면 키워드(고객사명+과정명) 정확도 확인 필요."*
+
+LD가 자연어 피드백으로 보완 가능. (시스템 본질 — 100% 자동 ≠ 목표)
+
+---
+
 ## 아웃풋
 
 ```json
