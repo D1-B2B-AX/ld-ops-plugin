@@ -66,7 +66,7 @@ cp ~/.claude/commands/ld-ops-plugin/config/settings.example.json \
 | **workspace-mcp** (Local Python) | Google Calendar / Gmail / Drive | 일정·메일·기획시트 | 필수 |
 | **claude.ai Slack** | 슬랙 채널 검색 | 운영 메시지 | 필수 |
 | claude.ai Gmail | 메일 보조 | 일부 라벨 | 선택 |
-| claude.ai Notion | 노션 강의 캘린더 (2팀) | 다차수 회차 | 선택 (v1.0 비활성) |
+| claude.ai Notion | 노션 강의 캘린더 | 다차수 회차 | 선택 (v1.0 비활성) |
 
 `/운영일지` 첫 실행 시 자동으로 인증 상태를 점검하고, 미인증 항목은 안내합니다.
 
