@@ -717,6 +717,29 @@ def compose(salesmap_data, calendar_data, drive_data, slack_data, notion_data=No
             warnings = []
             session_type = "multi"  # ops_req 사용은 multi 강제 (위 카운트는 그대로)
             # 드라이브 분해보다 우선 — 운영 요청 채널이 정형 양식
+
+            # v1.1.6 (260508): ops_req 세션이 모두 과거이고 세일즈맵 기간이 미래까지면
+            # 세일즈맵 fallback 세션 추가 박음 (Won 딜 무조건 박힘 보장)
+            # — 5/8 유한킴벌리 케이스 차단: 슬랙 thread 1건만 잡혔는데 한참 과거라 Stale 제외 사고
+            today_d = date.today()
+            has_future = False
+            for s in ops_req_sessions:
+                ed = parse_date(s.get("edu_end"))
+                if ed and ed >= today_d:
+                    has_future = True
+                    break
+            if not has_future:
+                sm_end = parse_date(deal.get("edu_end"))
+                if sm_end and sm_end >= today_d:
+                    next_sno = max((s.get("session_no", 0) for s in ops_req_sessions), default=0) + 1
+                    sessions.append({
+                        "session_no": next_sno,
+                        "edu_start": date_str(deal.get("edu_start")) or "",
+                        "edu_end": date_str(deal.get("edu_end")) or "",
+                        "source": ["salesmap"],
+                        "warning_flag": "multi_unresolved_fallback",
+                    })
+                    warnings.append("ops_req 세션이 모두 과거 — 세일즈맵 기간 fallback 추가 (Won 딜 누락 차단)")
         elif session_type == "single":
             sessions, warnings = compose_single(deal, cal_events, ntn_events, drv_sched)
         elif session_type == "multi":
