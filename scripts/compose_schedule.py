@@ -490,6 +490,13 @@ OPS_REQ_HL_LINE_PATTERN = re.compile(
     r"(\d+)월\s*([\d,\s~∼\-]+)"
 )
 
+# v1.1.5 (260508): 3개 이상 콤마 나열 M/D 시퀀스 — 자유서술 thread 일정 추출
+# 예: "4/14, 4/28, 5/19, 5/26, 6/2, 6/9" — 유한킴벌리형
+OPS_REQ_DATE_SEQUENCE_PATTERN = re.compile(
+    r"(?:\d{1,2}/\d{1,2}(?:\([월화수목금토일]\))?\s*,\s*){2,}\d{1,2}/\d{1,2}(?:\([월화수목금토일]\))?"
+)
+INDIVIDUAL_DATE_PATTERN = re.compile(r"(\d{1,2})/(\d{1,2})")
+
 
 def _normalize_year(month, base_year):
     """1~3월이면 base_year+1, 그 외는 base_year. (오늘 4/27 기준 1~3월은 다음 해 추정)"""
@@ -589,6 +596,32 @@ def _parse_hl_pattern(text, base_year):
     return sessions
 
 
+def _parse_date_sequence_pattern(text, base_year):
+    """v1.1.5 (260508): 3개 이상 콤마 나열 M/D 시퀀스 추출 — 자유서술 thread 일정 (유한킴벌리형)."""
+    sessions = []
+    sno_counter = 1
+    for seq_match in OPS_REQ_DATE_SEQUENCE_PATTERN.finditer(text):
+        seq_text = seq_match.group(0)
+        for date_match in INDIVIDUAL_DATE_PATTERN.finditer(seq_text):
+            try:
+                month = int(date_match.group(1))
+                day = int(date_match.group(2))
+                if month < 1 or month > 12 or day < 1 or day > 31:
+                    continue
+                y = _normalize_year(month, base_year)
+                sessions.append({
+                    "session_no": sno_counter,
+                    "edu_start": f"{y:04d}-{month:02d}-{day:02d}",
+                    "edu_end": f"{y:04d}-{month:02d}-{day:02d}",
+                    "source": ["slack_ops_request"],
+                    "raw_match": f"{month}/{day}",
+                })
+                sno_counter += 1
+            except ValueError:
+                continue
+    return sessions
+
+
 def parse_ops_request_threads(ops_requests_data, base_year=None):
     """v1.1: 운영 요청 thread 텍스트에서 차수 분해 추출.
 
@@ -608,7 +641,7 @@ def parse_ops_request_threads(ops_requests_data, base_year=None):
             continue
         if not isinstance(deal_info, dict):
             continue
-        threads = deal_info.get("ops_request_threads", []) or []
+        threads = deal_info.get("threads") or deal_info.get("ops_request_threads") or []
         all_sessions = []
         for thread in threads:
             text = thread.get("combined_text", "") or ""
@@ -621,6 +654,11 @@ def parse_ops_request_threads(ops_requests_data, base_year=None):
             hl_sessions = _parse_hl_pattern(text, base_year)
             if hl_sessions:
                 all_sessions.extend(hl_sessions)
+                continue
+            # 3차 (v1.1.5): 콤마 나열 M/D 시퀀스 — 자유서술 thread 일정
+            seq_sessions = _parse_date_sequence_pattern(text, base_year)
+            if seq_sessions:
+                all_sessions.extend(seq_sessions)
 
         if all_sessions:
             # 중복 제거 (같은 (session_no, edu_start) 1번만)
