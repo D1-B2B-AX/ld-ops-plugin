@@ -40,7 +40,7 @@ LD가 **교육 운영 체크포인트의 빈칸(증거 없음)을 기한 전에 
 ## 설치
 
 ```bash
-git clone https://github.com/<your-org>/ld-ops-plugin.git ~/.claude/commands/ld-ops-plugin
+git clone https://github.com/D1-B2B-AX/ld-ops-plugin.git ~/.claude/commands/ld-ops-plugin
 ```
 
 설치 후 `config/settings.example.json`을 복사해서 본인 정보로 수정:
@@ -55,6 +55,29 @@ cp ~/.claude/commands/ld-ops-plugin/config/settings.example.json \
 - `owner.email` — 본인 이메일
 - `owner.team` — `교육 1팀` / `교육 2팀` / `교육 1팀 운영 파트` / `교육 2팀 운영 파트`
 - `owner.calendars[].id` — 본인 구글 캘린더 ID
+
+---
+
+💡 **[Tip] 또는 아래 통합 메시지 초안 (LD가 클로드 코드에 통째로 복붙)을 복사하시어 활용**해도 됩니다!
+
+운영일지 플러그인 환경 설정해줘. 아래 순서대로 진행하고, 각 단계 끝날 때마다 한 줄 결과만 보고해.
+
+1. 슬랙 MCP 인증 확인 — /mcp 입력해서 슬랙 연결 상태 확인. 미연결이면 "내 슬랙 연결해줘" 진행.
+2. workspace-mcp 인증 확인 — Gmail·Calendar·Drive 통합 인증. 미연결이면 "내 구글 드라이브 연결해줘" 진행.
+3. gh CLI 설치 확인 — PowerShell에서 gh --version 실행. 미설치면 다음 명령어 안내:
+winget install --id GitHub.cli
+4. 세일즈맵 DB 다운로드 — PowerShell에서 다음 명령어 실행 안내:
+mkdir -p $HOME\salesmap
+gh release download salesmap-db-latest --repo sabinanfranz/data_analysis_ai --pattern "salesmap_latest.db"
+--dir $HOME\salesmap --clobber
+5. 플러그인 설치 — PowerShell에서:
+git clone https://github.com/D1-B2B-AX/ld-ops-plugin $HOME\.claude\commands\ld-ops-plugin
+6. settings 파일 만들기 — PowerShell에서:
+cp $HOME\.claude\commands\ld-ops-plugin\config\settings.example.json
+$HOME\.claude\commands\ld-ops-plugin\config\settings.json
+7. settings.json 본인 정보 채우기 (자연어로 직접 박기):
+    - owner: 이름·회사 이메일·팀(교육1팀/2팀/운영파트)·캘린더 ID
+    - 슬랙 user ID 자동 검색해서 박기 (없으면 null로 두면 @멘션 폴백)
 
 ---
 
@@ -191,4 +214,20 @@ _(해당 없음)_
 
 ## 버전
 
+**v1.1.4 (2026-04-28~)** — STEP 7 운영 요청 채널 thread 자동 수집·검색 윈도우·과정명 토큰·정형 thread 우선순위·출력 스키마 강제 (LLM 자유 생성 차단)·다차수 분해 차단 이슈 해결·회사명 어순 변형 검색.
+
 **v1.0 (2026-04-28)** — 체크포인트 매트릭스 구조 + 자연어 피드백 영구성 + 자동 다운로드 통합 완료.
+
+---
+
+## 추후 보완 영역 (v2)
+
+본 plugin v1은 *체크포인트 매트릭스 + 자연어 피드백* 뼈대를 박은 영역입니다. 다음 영역은 *v2 보강 영역*으로 진입 예정:
+
+- **다차수 분해 자동화** — 차수 단위 모델 (트랙·박일짜리·묶음 단위)·셀 색상 인식·real-time 변동 추적
+- **LD/딜별 customization 영역** — LD마다 운영 idiom 차이 흡수·딜별 차수 정의 유동성 반영
+- **데이터 처리 layer 보강** — `compose_schedule`·`build_matrix`·`generate_ops_md` 영역 차수 단위 모델로 진화
+
+상세 설계 회고: [📂 운영일지 플러그인 (260423~260428)](https://www.notion.so/260423-260428-35a11db511ea812e8673e56e613ae800)
+
+> *"v1 1개월 작업의 가장 큰 산출 = 시스템이 자동 수집 못 하는 영역 = LD/딜이 명시적으로 입력해야 하는 영역의 경계 정의."*
